@@ -76,8 +76,19 @@ public class RXMessing {
                     }
                 });
             }
+        }).map(new Func1<JSONObject, String>() {
+
+            @Override
+            public String call(JSONObject jsonObject) {
+                try {
+                    return jsonObject.getString("title_short");
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+                return null;
+            }
         }).
-        subscribe(new Observer<JSONObject>() {
+        subscribe(new Observer<String>() {
             @Override
             public void onCompleted() {
 
@@ -89,8 +100,8 @@ public class RXMessing {
             }
 
             @Override
-            public void onNext(JSONObject jsonObject) {
-                System.out.println(jsonObject);
+            public void onNext(String string) {
+                System.out.println(string);
             }
         });
 
