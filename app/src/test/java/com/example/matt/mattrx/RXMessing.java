@@ -14,17 +14,16 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.Charset;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Date;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
 
 import rx.Observable;
 import rx.Observer;
+import rx.Scheduler;
 import rx.Subscriber;
-import rx.Subscription;
 import rx.functions.Func1;
-import rx.subjects.BehaviorSubject;
-
-import static org.junit.Assert.*;
+import rx.schedulers.Schedulers;
 
 /**
  * Example local unit test, which will execute on the development machine (host).
@@ -32,33 +31,21 @@ import static org.junit.Assert.*;
  * @see <a href="http://d.android.com/tools/testing">Testing documentation</a>
  */
 public class RXMessing {
+
     @Test
-    public void addition_isCorrect() throws Exception {
+    public void messingAboutWithParallelizing() throws Exception {
+        jsonParsingWithExecutor(Schedulers.computation());
+//        jsonParsingWithExecutor(Schedulers.from(Executors.newFixedThreadPool(20)));
+    }
 
-        Observable<JSONObject> gettObservable = Observable.create(new Observable.OnSubscribe<JSONObject>() {
+    private void jsonParsingWithExecutor(Scheduler scheduler) {
+        Date start = new Date();
+        Observable.fromCallable(new Callable<JSONObject>() {
             @Override
-            public void call(Subscriber<? super JSONObject> subscriber) {
-                try {
-                    URL url = new URL("https://api.deezer.com/user/2529/flow");
-                    HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-                    InputStream is = connection.getInputStream();
-                    BufferedReader rd = new BufferedReader(new InputStreamReader(is, Charset.forName("UTF-8")));
-                    String jsonText = readAll(rd);
-                    JSONObject json = new JSONObject(jsonText);
-                    subscriber.onNext(json);
-                } catch (MalformedURLException e) {
-                    e.printStackTrace();
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-
+            public JSONObject call() throws Exception {
+                return getJson();
             }
-        });
-
-        gettObservable.flatMap(new Func1<JSONObject, Observable<JSONObject>>(){
-
+        }).flatMap(new Func1<JSONObject, Observable<JSONObject>>(){
             @Override
             public Observable<JSONObject> call(final JSONObject jsonObject) {
                 return Observable.create(new Observable.OnSubscribe<JSONObject>() {
@@ -68,6 +55,7 @@ public class RXMessing {
                         try {
                             JSONArray data = jsonObject.getJSONArray("data");
                             for (int i=0; i<data.length(); i++) {
+                                System.out.println("Next in data on " + Thread.currentThread().getName());
                                 subscriber.onNext(data.getJSONObject(i));
                             }
                         } catch (JSONException e) {
@@ -76,22 +64,26 @@ public class RXMessing {
                     }
                 });
             }
-        }).map(new Func1<JSONObject, String>() {
+        })
+        .observeOn(scheduler)
+        .map(new Func1<JSONObject, String>() {
 
             @Override
             public String call(JSONObject jsonObject) {
                 try {
+                    System.out.println("Getting title_short on " + Thread.currentThread().getName());
+                    Thread.sleep(100);
                     return jsonObject.getString("title_short");
-                } catch (JSONException e) {
+                } catch (JSONException | InterruptedException e) {
                     e.printStackTrace();
                 }
                 return null;
             }
-        }).
-        subscribe(new Observer<String>() {
+        })
+                .subscribe(new Observer<String>() {
             @Override
             public void onCompleted() {
-
+                System.out.println("Completed");
             }
 
             @Override
@@ -105,63 +97,8 @@ public class RXMessing {
             }
         });
 
-//        Observable<String> observable = subject.flatMap(new Func1<PairOfString, Observable<String>>() {
-//            @Override
-//            public Observable<String> call(final PairOfString pairOfString) {
-//                return Observable.create(new Observable.OnSubscribe<String>() {
-//                    @Override
-//                    public void call(Subscriber<? super String> subscriber) {
-//                        subscriber.onNext(pairOfString.hello.toUpperCase());
-//                        subscriber.onNext(pairOfString.world.toUpperCase());
-//                    }
-//                });
-//            }
-//        });
 
-
-//        Observable<String> observable = subject.flatMap(new Func1<Object, Observable<? extends String>>() {
-//            @Override
-//            public Observable<String> call(final String s) {
-//                return Observable.create(new Observable.OnSubscribe<String>() {
-//                                             @Override
-//                                             public void call(Subscriber<? super String> subscriber) {
-//                                                 subscriber.onNext(s.toUpperCase());
-//                                                 subscriber.onNext(s.substring(0,2));
-//                                             }
-//                                         });
-//            }
-//        });
-
-//        observable.subscribe(new Observer<String>() {
-//            @Override
-//            public void onCompleted() {
-//                System.out.println("completed");
-//            }
-//
-//            @Override
-//            public void onError(Throwable e) {
-//                e.printStackTrace();
-//            }
-//
-//            @Override
-//            public void onNext(String string) {
-//                System.out.println(string);
-//            }
-//        });
-//        subject.onCompleted();
-//
-//        subject.onNext(new PairOfString("hello again", "new world"));
-
-    }
-
-    private class PairOfString {
-        private final String hello;
-        private final String world;
-
-        public PairOfString(String hello, String world) {
-            this.hello = hello;
-            this.world = world;
-        }
+        System.out.println("Elapsed: " + (new Date().getTime()-start.getTime()));
     }
 
     private static String readAll(Reader rd) throws IOException {
@@ -171,5 +108,24 @@ public class RXMessing {
             sb.append((char) cp);
         }
         return sb.toString();
+    }
+
+    private JSONObject getJson() {
+        try {
+            System.out.println("Making call on thread: " + Thread.currentThread().getName());
+            URL url = new URL("https://api.deezer.com/user/2529/flow");
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            InputStream is = connection.getInputStream();
+            BufferedReader rd = new BufferedReader(new InputStreamReader(is, Charset.forName("UTF-8")));
+            String jsonText = readAll(rd);
+            return new JSONObject(jsonText);
+        } catch (MalformedURLException e) {
+            e.printStackTrace();
+        } catch (JSONException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 }

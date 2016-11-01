@@ -1,23 +1,34 @@
 package com.example.matt.mattrx;
 
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
-import android.widget.TextView;
+import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.Reader;
+import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
 
 import rx.Observable;
 import rx.Observer;
-import rx.android.schedulers.AndroidSchedulers;
+import rx.Scheduler;
+import rx.Subscriber;
+import rx.functions.Func1;
 import rx.schedulers.Schedulers;
 
 public class MainActivity extends AppCompatActivity {
@@ -26,51 +37,106 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        final long startTime = new Date().getTime();
+        final List<String> names = new ArrayList<String>() {{
+            add("Ringo");
+            add("John");
+            add("Paul");
+            add("George");
+            add("Ringo");
+            add("John");
+            add("Paul");
+            add("George");
+            add("Ringo");
+            add("John");
+            add("Paul");
+            add("George");
+            add("Ringo");
+            add("John");
+            add("Paul");
+            add("George");
+            add("Ringo");
+            add("John");
+            add("Paul");
+            add("George");
+            add("Ringo");
+            add("John");
+            add("Paul");
+            add("George");
+            add("Ringo");
+            add("John");
+            add("Paul");
+            add("George");
+            add("Ringo");
+            add("John");
+            add("Paul");
+            add("George");
+        }};
 
-        final TextView textView = (TextView)findViewById(R.id.textview);
-        textView.setText("starting");
+        final Scheduler scheduler = Schedulers.from(Executors.newFixedThreadPool(5));
 
-        Observable<String> listObservable = Observable.fromCallable(new Callable<String>() {
+        Observable.just(names).subscribeOn(Schedulers.io())
+                .flatMap(new Func1<List<String>, Observable<String>>() {
+                    @Override
+                    public Observable<String> call(final List<String> names) {
+                        return Observable.create(new Observable.OnSubscribe<String>() {
+                            @Override
+                            public void call(final Subscriber<? super String> subscriber) {
+                                for (final String name : names) {
+                                    Observable
+                                            .just(name)
+                                            .observeOn(scheduler)
+                                            .map(new ExpensiveOperation())
+                                            .subscribe(new Subscriber<String>() {
+                                                @Override
+                                                public void onCompleted() {
+
+                                                }
+
+                                                @Override
+                                                public void onError(Throwable e) {
+
+                                                }
+
+                                                @Override
+                                                public void onNext(String s) {
+                                                    subscriber.onNext(name);
+                                                }
+                                            });
+                                }
+                            }
+                        }).subscribeOn(Schedulers.computation());
+                    }
+                })
+                .subscribe(new Subscriber<String>() {
             @Override
-            public String call() throws Exception {
-                return getColorList();
+            public void onCompleted() {
+
+            }
+
+            @Override
+            public void onError(Throwable e) {
+
+            }
+
+            @Override
+            public void onNext(String string) {
+                Log.v("RXExample", string + " on " + Thread.currentThread().getName());
+                Log.v("RXExample", "Elapsed time " + (new Date().getTime() - startTime));
             }
         });
-
-        listObservable
-                .subscribeOn(Schedulers.io())
-                .observeOn(AndroidSchedulers.mainThread())
-                .subscribe(new Observer<String>() {
-                    @Override
-                    public void onCompleted() {
-                        System.out.println("completed");
-                    }
-
-                    @Override
-                    public void onError(Throwable e) {
-                        System.out.println("error");
-                        e.printStackTrace();
-                    }
-
-                    @Override
-                    public void onNext(String string) {
-                        textView.setText(string);
-                    }
-                });
     }
 
-    private String getColorList() throws InterruptedException, IOException {
-        URL url = new URL("https://api.deezer.com/user/2529");
-        URLConnection urlConnection = url.openConnection();
-        InputStream is = urlConnection.getInputStream();
-        BufferedReader rd = new BufferedReader(new InputStreamReader(is));
-        StringBuilder response = new StringBuilder(); // or StringBuffer if Java version 5+
-        String line;
-        while ((line = rd.readLine()) != null) {
-            response.append(line);
-            response.append('\r');
+    private static class ExpensiveOperation implements Func1<String, String> {
+        @Override
+        public String call(String s) {
+            //Simulate expensive operation
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            return s.toUpperCase();
         }
-        rd.close();
-        return response.toString();
     }
 }
